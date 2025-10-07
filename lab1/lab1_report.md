@@ -81,13 +81,13 @@ There is NO WARRANTY, to the extent permitted by law.
 
 接下来我们通过`make qemu`指令启动qemu，加载内核运行ucore，运行结果部分截图如下：
 
-<img src="C:\Users\33537\AppData\Roaming\Typora\typora-user-images\image-20251006143536969.png" alt="image-20251006143536969" style="zoom: 50%;" />
+<img src="lab1_report.assets/image1.png" alt="" style="zoom: 50%;" />
 
 运行成功，实验环境无误。接下来启动调试环境并开始调试。
 
 开启两个终端，一个终端执行指令`make debug`，另一个终端执行指令`make gdb`，GDB启动并显示`(gdb)`提示符：
 
-![image-20251005191145878](C:\Users\33537\AppData\Roaming\Typora\typora-user-images\image-20251005191145878.png)
+![](lab1_report.assets/image2.png)
 
 接下来，我们开始对其进行逐步调试并观察相应结果：
 
