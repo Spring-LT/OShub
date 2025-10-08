@@ -712,6 +712,38 @@ graph LR
     G[OpenSBI] --> E
 ```
 
+#### 5. 内联汇编代码
+
+在讲解 `ecall` 的封装的时候，使用了内联汇编代码，这里有一些地方，比如 `libs/sbi.c` 中 `sbi_call` 函数，这里不仅仅实现了调用 `ecall` → 陷入M模式 → OpenSBI输出字符'A' 的功能，其中的最后几行，也并不是被执行的指令，而是给编译器的**指示和约束**，对性能进行了优化。
+
+```c
+uint64_t sbi_call(uint64_t sbi_type, uint64_t arg0, uint64_t arg1, uint64_t arg2) {
+    uint64_t ret_val;
+
+    __asm__ volatile (
+        // 1. 将功能编号和参数放入指定的寄存器
+        "mv x17, %[sbi_type]\n" // 功能编号 -> x17 (a7)
+        "mv x10, %[arg0]\n"     // arg0 -> x10 (a0)
+        "mv x11, %[arg1]\n"     // arg1 -> x11 (a1)
+        "mv x12, %[arg2]\n"     // arg2 -> x12 (a2)
+
+        // 2. 执行 ecall 指令，发起调用
+        "ecall\n"
+
+        // 3. 将返回值（在 x10/a0 中）移动到 C 变量 ret_val 中
+        "mv %[ret_val], x10"
+
+        // 输出操作数：将汇编的结果输出到C变量ret_val
+        : [ret_val] "=r" (ret_val)
+        // 输入操作数：将C变量sbi_type, arg0, arg1, arg2的值作为输入传给汇编
+        : [sbi_type] "r" (sbi_type), [arg0] "r" (arg0), [arg1] "r" (arg1), [arg2] "r" (arg2)
+        // 告知编译器：内联汇编可能会读取或写入内存，防止编译器优化时出错
+        : "memory"
+    );
+    return ret_val;
+}
+```
+
 
 
 -------
