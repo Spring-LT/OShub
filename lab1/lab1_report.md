@@ -441,6 +441,30 @@ There is NO WARRANTY, to the extent permitted by law.
 | 复位向量(0x1000) → OpenSBI → 内核入口 | 系统引导过程     | **含义**：实验展示了从硬件加电到OS内核执行的完整链条 。<br />**关系**：实验是原理的具体实现，验证了Bootloader的作用 。<br />**差异**：原理讨论通用引导概念，实验展示RISC-V特定实现(MROM→OpenSBI)。 |
 | 内核加载地址0x80200000                | 内核地址空间布局 | **含义**：内核在内存中的固定起始位置 。<br />**关系**：实验体现了链接脚本与物理内存规划的配合。 <br />**差异**：原理关注虚拟内存布局，实验关注实际的物理加载地址。 |
 
+```mermaid
+sequenceDiagram
+    participant M as Make
+    participant C as Compiler
+    participant L as Linker
+    participant O as Objcopy
+    participant Q as QEMU
+    participant S as OpenSBI
+    participant U as uCore Kernel
+
+    M->>C: 编译源码
+    Note over C: + cc kern/init/init.c<br/>+ cc libs/sbi.c
+    C->>L: 生成目标文件
+    L->>O: + ld bin/kernel
+    O->>O: riscv64-unknown-elf-objcopy<br/>生成 ucore.img
+    M->>Q: 启动 QEMU
+    Q->>S: 加载 OpenSBI 固件
+    S->>S: 显示 OpenSBI 信息
+    S->>U: 跳转到 ucore (0x80200000)
+    U->>U: 执行 kern_init()
+    U->>S: 调用 sbi_console_putchar
+    S->>Q: 输出字符到控制台
+```
+
 #### 2. **执行环境建立**
 
 | 实验知识点                          | OS原理知识点 | 含义、关系与差异                                             |
