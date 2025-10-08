@@ -567,6 +567,7 @@ graph TD
 - **实验体现**：通过`kernel.ld`精确控制内存布局。
 - **原理缺失**：OS原理课程很少深入讨论链接阶段的细节（包括如何定义、如何链接等）。
 - **重要性**：理解内核与应用程序在链接时的差异。
+- 这里的链接也很有意思，非常的有讲究，比如上面讨论过的 链接脚本 `tools/kernel.ld` 中很有意思的点。很多内容在实验指导书中都有讲解，助教们写的非常详细。
 
 #### 2. **RISC-V特定架构细节**
 
@@ -579,6 +580,115 @@ graph TD
 - **实验体现**：MROM → OpenSBI → Kernel的层次结构。
 - **原理缺失**：传统OS原理直接从Bootloader开始。
 - **重要性**：理解现代安全启动和特权级隔离。
+
+#### 4. MakeFile的作用
+
+- **实验体现**：当前的实验能够完美的运行，很大一部分的原因和完美的 `makefile` 有关，我们只需要使用 `make qemu` ，`make debug` 等就可以很方便的进行调试，但是如果没有 `makefile` 一切都会变的复杂起来
+- **重要性**：为我们封装好了复杂的指令是非常方便的，这里以执行 `make qemu` 为例，下面是makefile做的工作，都是我们看不到的，总有人在你不知道的地方默默付出，比如我们伟大的操作系统助教们
+
+```mermaid
+graph TD
+    A[make qemu] --> B[编译libs库]
+    B --> C[编译kernel代码]
+    C --> D[链接生成kernel.elf]
+    D --> E[生成ucore.img]
+    E --> F[启动QEMU]
+    
+    B --> B1[编译sbi.c等]
+    C --> C1[编译init.c等]
+    D --> D1[使用kernel.ld链接脚本]
+    E --> E1[objcopy转换格式]
+```
+
+1. 设置环境和变量
+
+   ```makefile
+   GCCPREFIX := riscv64-unknown-elf-  # 交叉编译工具链前缀
+   QEMU := qemu-system-riscv64        # 模拟器
+   ```
+
+2. 编译库文件 (libs)
+
+   ```bash
+   riscv64-unknown-elf-gcc -mcmodel=medany -std=gnu99 -Wno-unused -Werror \
+     -fno-builtin -Wall -O2 -nostdinc -fno-stack-protector \
+     -ffunction-sections -fdata-sections -g \
+     -Ilibs -c libs/sbi.c -o obj/libs/sbi.o
+   ```
+
+   - 这一步是makefile帮我们执行的命令，如果进行手动执行的话，无疑是很麻烦的
+
+3. 编译内核代码 (kernel)
+
+   ```c
+   # 编译各个内核模块
+   + cc kern/init/init.c              # 内核初始化
+   + cc kern/debug/...                # 调试相关
+   + cc kern/driver/...               # 设备驱动
+   + cc kern/trap/...                 # 异常处理
+   + cc kern/mm/...                   # 内存管理
+   ```
+
+4. 链接生成内核ELF文件
+
+   ```bash
+   riscv64-unknown-elf-ld -m elf64lriscv -nostdlib --gc-sections \
+     -T tools/kernel.ld \
+     -o bin/kernel \
+     obj/kern/init/init.o obj/kern/libs/stdio.o ... obj/libs/sbi.o
+   ```
+
+   **关键文件**：`tools/kernel.ld` - 链接脚本，指定：
+
+   - 入口点：`ENTRY(kern_entry)`
+   - 基地址：`BASE_ADDRESS = 0x80200000`
+   - 各段布局：`.text`, `.data`, `.bss` 等
+
+5. 生成反汇编和符号表
+
+   ```makefile
+   @$(OBJDUMP) -S $@ > $(call asmfile,kernel)    # 反汇编
+   @$(OBJDUMP) -t $@ > $(call symfile,kernel)    # 符号表
+   ```
+
+6. 生成二进制镜像
+
+   ```bash
+   riscv64-unknown-elf-objcopy bin/kernel --strip-all -O binary bin/ucore.img
+   ```
+
+   - **作用**：将ELF格式的`bin/kernel`转换为纯二进制的`bin/ucore.img`，移除调试信息。
+   - 这里最初还以为 `.img` 是图像文件，后来发现是二进制镜像文件
+
+7. 启动QEMU
+
+   ```bash
+   $(V)$(QEMU) \
+       -machine virt \
+       -nographic \
+       -bios default \
+       -device loader,file=$(UCOREIMG),addr=0x80200000
+   ```
+
+   - `-machine virt`：使用RISC-V虚拟机器
+   - `-nographic`：无图形界面，使用控制台
+   - `-bios default`：使用内置的OpenSBI固件
+   - `-device loader,file=ucore.img,addr=0x80200000`：将内核镜像加载到指定地址
+
+**关键文件生成过程**
+
+```mermaid
+graph LR
+    A[*.c/*.S源码] --> B[*.o目标文件]
+    B --> C[kernel.elf]
+    C --> D[ucore.img]
+    D --> E[QEMU内存]
+    
+    F[kernel.ld] --> C
+    G[OpenSBI] --> E
+```
+
+
 
 -------
 
