@@ -101,6 +101,42 @@ C 语言函数严重依赖栈来存储局部变量、传递参数、保存返回
 >
 > 这是**实际的运行时行为**，目的是不压入返回地址，直接跳转，同时避免了不必要的栈空间的使用。
 
+综合上述分析，下面是`kern/init/entry.S`代码的执行流程：
+
+```mermaid
+sequenceDiagram
+    participant 硬件引导
+    participant 链接脚本
+    participant entry.S
+    participant 内核栈内存
+    participant kern_init
+
+    硬件引导->>链接脚本: 加载内核镜像
+    链接脚本->>entry.S: 跳转到入口点 kern_entry
+    
+    Note over entry.S: 开始执行入口代码
+    
+    rect rgb(240, 240, 240)
+        Note right of entry.S: 第一阶段：初始化栈指针
+        entry.S->>内核栈内存: la sp, bootstacktop
+        Note over entry.S: 将栈顶地址加载到sp寄存器
+    end
+    
+    rect rgb(240, 240, 240)
+        Note right of entry.S: 第二阶段：尾调用跳转
+        entry.S->>kern_init: tail kern_init
+        Note over entry.S: 尾调用优化，不保存返回地址
+    end
+
+    Note over entry.S: 数据段定义（执行前已设置）
+    Note over entry.S: .align PGSHIFT (按页对齐)
+    Note over entry.S: 分配栈空间 KSTACKSIZE
+    Note over entry.S: 定义 bootstack (栈底)
+    Note over entry.S: 定义 bootstacktop (栈顶)
+    
+    kern_init->>kern_init: 执行内核初始化
+    Note right of kern_init: 不再返回entry.S
+```
 -----
 
 ## 练习2: 使用GDB验证启动流程
