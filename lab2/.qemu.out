@@ -30,13 +30,43 @@ DTB init completed
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc02000dc (virtual)
-  etext  0xffffffffc0201666 (virtual)
-  edata  0xffffffffc0205018 (virtual)
-  end    0xffffffffc0205078 (virtual)
-Kernel executable memory footprint: 20KB
-memory management: best_fit_pmm_manager
+  etext  0xffffffffc020151c (virtual)
+  edata  0xffffffffc0206018 (virtual)
+  end    0xffffffffc0206168 (virtual)
+Kernel executable memory footprint: 25KB
+memory management: buddy_pmm_manager
 physcial memory map:
   memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].
+==================== Buddy System Check Start ====================
+buddy_system: basic_check begin
+buddy_system: basic_check passed
+Total free pages: 31929
+
+[Test 1] Block splitting test
+  Allocated 1 page: PASS
+  Allocated 2 pages: PASS
+  Allocated 4 pages: PASS
+
+[Test 2] Block merging test
+  Free pages increased by 7: PASS
+
+[Test 3] Non-power-of-2 allocation
+  Allocated 3 pages (rounded to 4): PASS
+  Allocated 5 pages (rounded to 8): PASS
+
+[Test 4] Large block allocation
+  Allocated 64 pages: PASS
+
+[Test 5] Sequential alloc/free
+  Allocated 10 single pages: PASS
+  Freed 10 single pages: PASS
+
+[Test 6] Final free pages check
+  Initial free pages: 31929
+  Final free pages:   31929
+  Free pages match: PASS
+
+==================== Buddy System Check PASSED ====================
 check_alloc_page() succeeded!
-satp virtual address: 0xffffffffc0204000
-satp physical address: 0x0000000080204000
+satp virtual address: 0xffffffffc0205000
+satp physical address: 0x0000000080205000
