@@ -30,43 +30,97 @@ DTB init completed
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc02000dc (virtual)
-  etext  0xffffffffc020151c (virtual)
+  etext  0xffffffffc020199a (virtual)
   edata  0xffffffffc0206018 (virtual)
-  end    0xffffffffc0206168 (virtual)
+  end    0xffffffffc02060f4 (virtual)
 Kernel executable memory footprint: 25KB
-memory management: buddy_pmm_manager
+memory management: slub_pmm_manager
+memory management: slub_pmm_manager
+slub: initialization completed
 physcial memory map:
   memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].
-==================== Buddy System Check Start ====================
-buddy_system: basic_check begin
-buddy_system: basic_check passed
-Total free pages: 31929
 
-[Test 1] Block splitting test
-  Allocated 1 page: PASS
-  Allocated 2 pages: PASS
-  Allocated 4 pages: PASS
+========================================
+=== SLUB Memory Allocator Check ===
+========================================
 
-[Test 2] Block merging test
-  Free pages increased by 7: PASS
+[TEST 1] Basic Allocation Test
+----------------------------------------
+slub: created cache 'size-64' with object size 64
+slub: allocated slab with 32 objects of size 64
+✓ Allocated 64 bytes at 0xffffffffc0349000
+✓ Freed 64 bytes
 
-[Test 3] Non-power-of-2 allocation
-  Allocated 3 pages (rounded to 4): PASS
-  Allocated 5 pages (rounded to 8): PASS
+[TEST 2] Different Size Allocation Test
+----------------------------------------
+slub: created cache 'size-32' with object size 32
+slub: allocated slab with 32 objects of size 32
+✓ Allocated  32 bytes at 0xffffffffc034d000
+slub: allocated slab with 32 objects of size 64
+✓ Allocated  64 bytes at 0xffffffffc0350000
+slub: created cache 'size-96' with object size 96
+slub: allocated slab with 32 objects of size 96
+✓ Allocated  96 bytes at 0xffffffffc0355000
+slub: created cache 'size-128' with object size 128
+slub: allocated slab with 32 objects of size 128
+✓ Allocated 128 bytes at 0xffffffffc035a000
+slub: created cache 'size-160' with object size 160
+slub: allocated slab with 25 objects of size 160
+✓ Allocated 160 bytes at 0xffffffffc035f000
+slub: created cache 'size-192' with object size 192
+slub: allocated slab with 21 objects of size 192
+✓ Allocated 192 bytes at 0xffffffffc0364000
+slub: created cache 'size-224' with object size 224
+slub: allocated slab with 18 objects of size 224
+✓ Allocated 224 bytes at 0xffffffffc0369000
+slub: created cache 'size-256' with object size 256
+slub: allocated slab with 16 objects of size 256
+✓ Allocated 256 bytes at 0xffffffffc036e000
+slub: created cache 'size-288' with object size 288
+slub: allocated slab with 14 objects of size 288
+✓ Allocated 288 bytes at 0xffffffffc0373000
+slub: created cache 'size-320' with object size 320
+slub: allocated slab with 12 objects of size 320
+✓ Allocated 320 bytes at 0xffffffffc0378000
 
-[Test 4] Large block allocation
-  Allocated 64 pages: PASS
+✓ Freed  32 bytes
+✓ Freed  64 bytes
+✓ Freed  96 bytes
+✓ Freed 128 bytes
+✓ Freed 160 bytes
+✓ Freed 192 bytes
+✓ Freed 224 bytes
+✓ Freed 256 bytes
+✓ Freed 288 bytes
+✓ Freed 320 bytes
 
-[Test 5] Sequential alloc/free
-  Allocated 10 single pages: PASS
-  Freed 10 single pages: PASS
+[TEST 3] Large Allocation Test
+----------------------------------------
+✓ Allocated 8192 bytes at 0xffffffffc037b000
+✓ Freed large allocation (8192 bytes)
 
-[Test 6] Final free pages check
-  Initial free pages: 31929
-  Final free pages:   31929
-  Free pages match: PASS
+[STATISTICS] Memory Usage Summary
+----------------------------------------
+Free pages: 31886
 
-==================== Buddy System Check PASSED ====================
+Cache Statistics:
+  size-320       : allocations=1, frees=0, active=1
+  size-288       : allocations=1, frees=0, active=1
+  size-256       : allocations=1, frees=0, active=1
+  size-224       : allocations=1, frees=0, active=1
+  size-192       : allocations=1, frees=0, active=1
+  size-160       : allocations=1, frees=0, active=1
+  size-128       : allocations=1, frees=0, active=1
+  size-96        : allocations=1, frees=0, active=1
+  size-32        : allocations=1, frees=0, active=1
+  size-64        : allocations=2, frees=0, active=2
+
+Total caches: 10
+
+========================================
+=== SLUB Check Completed ===
+========================================
+
 check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0205000
 satp physical address: 0x0000000080205000

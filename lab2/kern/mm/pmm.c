@@ -1,6 +1,6 @@
 #include <default_pmm.h>
 #include <best_fit_pmm.h>
-#include <buddy_pmm.h>  // 新增：引入 buddy system 头文件
+#include <slub_pmm.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -34,11 +34,10 @@ static void check_alloc_page(void);
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
-    // 新增：支持 buddy system 算法切换
-    // 可以通过注释/取消注释来选择不同的内存管理算法
-    pmm_manager = &buddy_pmm_manager;      // 新增：Buddy System 伙伴系统算法
-    // pmm_manager = &best_fit_pmm_manager;  // Best-Fit 最佳适配算法
-    // pmm_manager = &default_pmm_manager;   // First-Fit 首次适配算法
+    // 可以选择不同的内存管理器
+    // pmm_manager = &default_pmm_manager;
+    // pmm_manager = &best_fit_pmm_manager;
+    pmm_manager = &slub_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }

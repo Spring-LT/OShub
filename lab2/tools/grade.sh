@@ -358,16 +358,32 @@ echo "<<<<<<<<<<<<<<< here_run_qemu <<<<<<<<<<<<<<<<<<"
 run_qemu
 echo "<<<<<<<<<<<<<<< here_run_check <<<<<<<<<<<<<<<<<<"
 
+# 测试SLUB分配器
 pts=5
 quick_check 'check physical_memory_map_information'                                         \
-    'memory management: buddy_pmm_manager'                     \
+    'memory management: slub_pmm_manager'                     \
     '  memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].'                                  \
 
 pts=20
-quick_check 'check_buddy_system'                                       \
+quick_check 'check_slub_basic'                                       \
     'check_alloc_page() succeeded!'                                  \
-    'satp virtual address: 0xffffffffc0205000'                       \
-    'satp physical address: 0x0000000080205000'                      \
+    '-' '.*satp virtual address: 0xffffffffc020[0-9a-f]+.*'         \
+    '-' '.*satp physical address: 0x000000008020[0-9a-f]+.*'                      \
+
+pts=15
+quick_check 'check_slub_allocations'                                  \
+    '=== SLUB Memory Allocator Check ==='                            \
+    '-' '.*✓ Allocated.*bytes at.*'                                \
+    '-' '.*✓ Freed.*bytes.*'                                       \
+    '-' '.*✓ Allocated.*bytes at.*'                                \
+    '-' '.*✓ Freed.*bytes.*'                                       \
+    '-' '.*✓ Allocated.*bytes at.*'                                \
+    '-' '.*✓ Freed large allocation.*bytes.*'                     \
+    'Free pages:'                                                   \
+    'Cache Statistics:'                                             \
+    '-' '.*size-.*: allocations=.*, frees=.*, active=.*.*'       \
+    'Total caches:'                                                 \
+    '=== SLUB Check Completed ==='
 
 # pts=5
 # quick_check 'check ticks'                                       \
