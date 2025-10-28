@@ -1,0 +1,25 @@
+# 忽略所有bin目录下的内容
+bin/
+
+# 忽略所有obj目录下的内容
+obj/
+
+# 忽略编译产生的可执行文件
+*.o
+*.elf
+*.img
+
+# 忽略编辑器生成的文件
+*~
+.*.swp
+.*.swo
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 辅助说明文件
+lab3/中断处理流程详解.md

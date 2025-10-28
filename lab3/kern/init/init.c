@@ -26,14 +26,14 @@ int kern_init(void) {
     print_kerninfo();
 
     // grade_backtrace();
-    idt_init();  // init interrupt descriptor table
+    idt_init();  // init interrupt descriptor table 第一次中断初始化
 
-    pmm_init();  // init physical memory management
+    pmm_init();  // init physical memory management 内存管理初始化
 
-    idt_init();  // init interrupt descriptor table
+    idt_init();  // init interrupt descriptor table 第二次中断初始化
 
-    clock_init();   // init clock interrupt
-    intr_enable();  // enable irq interrupt
+    clock_init();   // init clock interrupt 设置时钟中断和定时器
+    intr_enable();  // enable irq interrupt 全局启用系统中断
 
     /* do nothing */
     while (1)
