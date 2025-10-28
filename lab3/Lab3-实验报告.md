@@ -47,6 +47,58 @@
 
 9. **返回执行**：执行`sret`指令，返回到中断发生前的程序继续执行。
 
+```mermaid
+flowchart TD
+    A[中断/异常发生]
+    
+    A --> B[硬件自动处理]
+    B --> C[保存关键寄存器<br/>sepc, scause, stval, sstatus]
+    C --> D[特权级切换到S模式]
+    D --> E[跳转到stvec指定地址<br/>__alltraps]
+    
+    E --> F[SAVE_ALL保存上下文]
+    F --> G[构建trapframe结构]
+    G --> H[move a0, sp传递参数]
+    H --> I[jal trap调用处理函数]
+    
+    I --> J{判断中断类型<br/>scause最高位}
+    J -->|中断<br/>最高位=1| K[interrupt_handler]
+    J -->|异常<br/>最高位=0| L[exception_handler]
+    
+    K --> M{具体中断类型}
+    M -->|IRQ_S_TIMER<br/>时钟中断| N[时钟中断处理]
+    M -->|其他中断| O[其他中断处理]
+    
+    L --> P{具体异常类型}
+    P -->|CAUSE_ILLEGAL_INSTRUCTION<br/>非法指令| Q[非法指令处理]
+    P -->|CAUSE_BREAKPOINT<br/>断点异常| R[断点异常处理]
+    P -->|其他异常| S[其他异常处理]
+    
+    N --> T[clock_set_next_event<br/>设置下次中断]
+    T --> U[ticks计数器累加]
+    U --> V{ticks % 100 == 0?}
+    V -->|是| W[print_ticks输出]
+    V -->|否| X[继续处理]
+    W --> Y{print_count >= 10?}
+    Y -->|是| Z[sbi_shutdown关机]
+    Y -->|否| X
+    
+    Q --> AA[输出异常信息<br/>tf->epc += 4跳过指令]
+    R --> AB[输出调试信息<br/>tf->epc += 4跳过指令]
+    
+    X --> AC[返回trap函数]
+    AA --> AC
+    AB --> AC
+    S --> AC
+    O --> AC
+    Z --> AC
+    
+    AC --> AD[返回__trapret]
+    AD --> AE[RESTORE_ALL恢复上下文]
+    AE --> AF[sret指令返回]
+    AF --> AG[恢复被中断程序执行]
+```
+
 #### `mov a0, sp`的目的
 
 `mov a0, sp`的作用是将栈指针作为参数传递给`trap`函数。在RISC-V的调用约定中，`a0`寄存器用于传递第一个函数参数。由于我们已经在栈上构建了完整的`trapframe`结构体，将栈指针传递给`trap`函数就相当于传递了整个中断上下文，使C语言处理函数能够访问并修改保存的寄存器和状态信息。
