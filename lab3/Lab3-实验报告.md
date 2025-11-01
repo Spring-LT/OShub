@@ -125,31 +125,115 @@ flowchart TD
 4. **调用约定**：虽然有些寄存器（如临时寄存器）在调用约定中由调用者保存，但为了保证中断处理的完整性和一致性，保存所有寄存器是最安全的做法。
 
 ### 扩展练习 Challenge2：理解上下文切换机制
+#### 问题1：`csrw sscratch, sp; csrrw s0, sscratch, x0` 的操作和目的？
+##### 代码分析
 
-#### `csrw sscratch, sp`和`csrrw s0, sscratch, x0`实现的操作
+```assembly
+# 在SAVE_ALL宏中：
+csrw sscratch, sp       # 将当前sp保存到sscratch
+# ... 保存其他寄存器 ...
+csrrw s0, sscratch, x0  # 将sscratch的值读到s0，同时将sscratch清0
+STORE s0, 2*REGBYTES(sp) # 将原sp值保存到trapframe中
+```
 
-这两条指令实现了一个巧妙的寄存器交换操作：
+##### 详细执行过程
 
-1. **`csrw sscratch, sp`**：将当前的栈指针保存到`sscratch`寄存器中。这一步保存了中断发生前的栈顶位置。
+###### 步骤1：保存原栈指针
 
-2. **`csrrw s0, sscratch, x0`**：这是一个原子的读-写交换操作。它将`sscratch`的内容（即之前保存的栈指针）读入`s0`寄存器，同时将0写入`sscratch`。
+```assembly
+csrw sscratch, sp  # 把当前的栈指针保存到sscratch寄存器
+```
 
-#### 这些操作的目的
+此时`sscratch` = 中断发生时的栈指针值。
 
-1. **保存原始栈指针**：通过这两步操作，我们成功地将中断发生前的栈指针保存到了`s0`寄存器中，以便稍后将其保存到`trapframe`结构体中。
+###### 步骤2：分配栈空间后
 
-2. **标识状态**：将`sscratch`设为0表示当前处于内核态。这对于区分内核态和用户态的中断处理非常重要。
+```assembly
+addi sp, sp, -36 * REGBYTES  # 在栈上分配trapframe空间
+# 现在sp指向新分配的trapframe起始地址
+```
 
+###### 步骤3：读取并清空sscratch
+
+```assembly
+csrrw s0, sscratch, x0  # 原子操作：s0 = sscratch, sscratch = x0(0)
+```
+
+该指令主要有两个操作：
+
+1. 读取 `sscratch` 的值到 `s0`
+2. 同时将 `x0` (恒为0) 写入 `sscratch`
+
+##### 目的
+
+1. **保存中断发生时的栈指针**。我们需要在trapframe中保存的是中断发生时的sp，而不是当前的sp，所以需要将中断时的sp提前保存在sscratch寄存器中用于后续使用。
+2. **清空sscratch为内核态标记**。sscratch的约定用法为若为0，则表示中断来自内核态；若为非0， 表示中断来自用户态，存储内核栈指针。因此`csrrw s0, sscratch, x0`在读取sp同时也按照约定将sscratch清0，标记为内核态中断。
 3. **实现巧妙的保存机制**：这种设计允许我们在不破坏其他寄存器的情况下，安全地保存原始栈指针。
 
-#### 为什么SAVE_ALL保存CSR但RESTORE_ALL不还原它们
+#### 问题2：为什么保存stval、scause但不恢复它们？store的意义何在？
 
+##### 保存的CSR寄存器
+
+```assembly
+# 在SAVE_ALL中保存：
+csrr s1, sstatus    # 状态寄存器 - 需要恢复
+csrr s2, sepc       # 异常PC - 需要恢复  
+csrr s3, sbadaddr   # 错误地址 - 不需要恢复
+csrr s4, scause     # 异常原因 - 不需要恢复
+
+STORE s1, 32*REGBYTES(sp)  # sstatus - 恢复
+STORE s2, 33*REGBYTES(sp)  # sepc    - 恢复
+STORE s3, 34*REGBYTES(sp)  # sbadaddr - 不恢复
+STORE s4, 35*REGBYTES(sp)  # scause   - 不恢复
+```
 SAVE_ALL保存`stval`、`scause`等CSR的意义在于：
 
 1. **诊断和调试**：这些寄存器包含了中断发生时的重要信息，保存它们可以用于调试和错误报告。
 
 2. **处理决策**：中断处理程序需要访问这些信息来决定如何处理不同类型的中断或异常。
+##### 需要恢复的CSR寄存器
 
+###### 1. `sstatus` - 必须恢复
+
+```c
+// sstatus包含关键状态信息：
+// - SIE: 中断使能位
+// - SPP: 之前特权模式
+// - SPIE: 之前中断使能状态
+// 这些状态直接影响后续执行，必须恢复
+```
+
+###### 2. `sepc` - 必须恢复
+
+```c
+// sepc是返回地址，决定sret后从哪里继续执行
+```
+
+##### 不需要恢复的CSR寄存器
+
+###### 1. `scause` - 只读的"现场证据"
+
+```c
+// scause的作用：
+// - 记录中断/异常的原因（只读）
+// - 用于诊断和分发处理
+// - 处理完成后就失去作用
+// 因此没必要恢复
+```
+
+###### 2. `sbadaddr` (stval) - 只读的附加信息
+
+```c
+// sbadaddr的作用：
+// - 页错误：出错的虚拟地址
+// - 非法指令：指令内容
+// - 对齐错误：出错地址
+
+// 这些是"只读的现场信息"，处理完成后就不需要了
+// 因此同样没必要恢复
+```
+
+#####
 而RESTORE_ALL不还原它们的原因是：
 
 1. **不需要恢复**：这些CSR只记录了中断发生时的状态，并不属于程序执行上下文的一部分。
@@ -159,6 +243,31 @@ SAVE_ALL保存`stval`、`scause`等CSR的意义在于：
 3. **sepc特殊处理**：唯一需要特殊处理的是`sepc`寄存器，但它在RESTORE_ALL中已经被单独恢复，因为它决定了程序恢复执行的位置。
 
 4. **安全性考虑**：随意修改这些控制寄存器可能会导致系统不稳定或安全问题。
+   
+##### store的意义
+
+1. **使C代码能够访问这些CSR值**。C语言无法直接访问CSR，CSR是处理器特有的寄存器，C语言标准没有定义访问CSR的语法，编译器不知道`scause`、`stval`这些特殊寄存器，因此必须要通过通用寄存器或内存栈进行传递。
+
+2. **保持中断发生时所有状态的完整性**，**为复杂的异常处理提供完整上下文**。由于汇编到C的参数传递约束：
+
+   ```assembly
+   # 如果我们尝试直接传递：
+   __alltraps:
+       csrr a0, scause    # 把scause作为第一个参数
+       csrr a1, stval     # 把stval作为第二个参数  
+       jal trap           # 调用C函数
+   
+   # 但在C函数中：
+   void trap(uint64_t cause, uint64_t stval) {
+       // 问题：我们还需要其他CSR和所有通用寄存器！
+       // 需要sstatus来判断之前模式
+       // 需要sepc来知道返回地址  
+       // 需要所有寄存器来完整保存上下文
+   }
+   ```
+
+   而中断处理需要完整的上下文保存需求，因此我们以结构体的形式把所有寄存器值均存放在栈上供函数使用更加规范可靠，方便函数读取使用。
+
 
 ### 练习1：完善中断处理
 
