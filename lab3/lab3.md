@@ -267,65 +267,17 @@
 
 **ebreak**：这条指令用于触发一个断点异常，通常用于调试。它也会导致控制流跳转到`stvec`指定的中断处理程序，但其目的并非服务请求，而是调试目的。
 
-#### 寄存器
+#### 从 U 模式陷入 S 模式的完整流程
 
-除了32个通用寄存器之外，RISCV架构还有大量的 **控制状态寄存器** **Control and Status Registers**(CSRs)。其中有几个重要的寄存器和中断机制有关。
+我们最常接触到的便是 U 模式陷入到 S 模式。当一个用户程序运行在 U 模式时，它通常在执行过程中有可能因为某些原因陷入 S 模式。运行在 U 模式的程序如果需要向操作系统请求服务，它会通过执行`ecall`指令发起系统调用，主动将控制权交给内核。同时，定时器也会在指定时间触发时钟中断，这会导致操作系统对当前进程进行时间片轮转调度，决定是否切换进程。另外如果程序发生了异常，比如访问非法内存地址、发生缺页等，系统也会转入内核进行处理。这些事件都触发了相关处理流程，将程序的运行状态从 U 模式转入 S 模式。
 
-有些时候，禁止CPU产生中断很有用。（就像你在做重要的事情，如操作系统lab的时候，并不想被打断）。所以，`sstatus`寄存器(Supervisor Status Register)里面有一个二进制位`SIE`(supervisor interrupt enable，在RISCV标准里是2^1 对应的二进制位)，数值为0的时候，如果当程序在S态运行，将禁用全部中断。（对于在U态运行的程序，SIE这个二进制位的数值没有任何意义），`sstatus`还有一个二进制位`UIE`(user interrupt enable)可以在置零的时候禁止用户态程序产生中断。
+首先，保存中断发生时的`pc`值，即程序计数器的值，这个值会被保存在`sepc`寄存器中。对于异常来说，这通常是触发异常的指令地址，而对于中断来说，则是被打断的指令地址。然后，记录中断或异常的类型，并将其写入`scause`寄存器。这里的`scause`会告诉系统是中断还是异常，且会给出具体的中断类型。
 
-在中断产生后，应该有个**中断处理程序**来处理中断。CPU怎么知道中断处理程序在哪？实际上，RISCV架构有个CSR叫做`stvec`(Supervisor Trap Vector Base Address Register)，即所谓的”中断向量表基址”。中断向量表的作用就是把不同种类的中断映射到对应的中断处理程序。如果只有一个中断处理程序，那么可以让`stvec`直接指向那个中断处理程序的地址。
+接下来，保存相关的辅助信息。如果异常与缺页或访问错误相关，将相关的地址或数据保存到`stval`寄存器，以便中断处理程序在后续处理中使用。紧接着，保存并修改中断使能状态。将当前的中断使能状态`sstatus.SIE`保存到`sstatus.SPIE`中，并且会将`sstatus.SIE`清零，从而禁用 S 模式下的中断。这是为了保证在处理中断时不会被其他中断打断。
 
-对于RISCV架构，`stvec`会把最低位的两个二进制位用来编码一个“模式”，如果是“00”就说明更高的SXLEN-2个二进制位存储的是唯一的中断处理程序的地址(SXLEN是`stval`寄存器的位数)，如果是“01”说明更高的SXLEN-2个二进制位存储的是中断向量表基址，通过不同的异常原因来索引中断向量表。但是怎样用62个二进制位编码一个64位的地址？RISCV架构要求这个地址是四字节对齐的，总是在较高的62位后补两个0。
+然后，保存当前的特权级信息。将当前特权级（即 U 模式，值为 0）保存到`sstatus.SPP`中，并将当前特权级切换到 S 模式。此时，系统已经进入 S 模式，准备跳转到中断处理程序。将`pc`设置为`stvec`寄存器中的值，并跳转到中断处理程序的入口。
 
->  扩展
->
-> 在旧版本的RISCV privileged ISA标准中（1.9.1及以前），RISCV不支持中断向量表，用最后两位数编码一个模式是1.10版本加入的。可以思考一下这个改动如何保证了后向兼容。[历史版本的ISA手册](https://github.com/riscv/riscv-isa-manual/releases/tag/archive)
->
-> 1.9.1版本的RISCV privileged architecture手册：
->
-> 4.1.3 Supervisor Trap Vector Base Address Register (stvec) The stvec register is an XLEN-bit read/write register that holds the base address of the S-mode trap vector. When an exception occurs, the pc is set to stvec. The stvec register is always aligned to a 4-byte boundary
-
-当我们触发中断进入 S 态进行处理时，以下寄存器会被硬件自动设置，将一些信息提供给中断处理程序：
-
-**sepc**(supervisor exception program counter)，它会记录触发中断的那条指令的地址；
-
-**scause**，它会记录中断发生的原因，还会记录该中断是不是一个外部中断；
-
-**stval**，它会记录一些中断处理所需要的辅助信息，比如指令获取(instruction fetch)、访存、缺页异常，它会把发生问题的目标地址或者出错的指令记录下来，这样我们在中断处理程序中就知道处理目标了。
-
-> 扩展
->
-> The RISC-V Instruction Set Manual Volume II: Privileged Architecture
->
-> （Document Version 20190608-Priv-MSU-Ratified）
->
-> 4.1.1 Supervisor Status Register (sstatus)
->
-> The SIE bit enables or disables all interrupts in supervisor mode. When SIE is clear, interrupts are not taken while in supervisor mode. When the hart is running in user-mode, the value in SIE is ignored, and supervisor-level interrupts are enabled. The supervisor can disable individual interrupt sources using the sie CSR. The SPIE bit indicates whether supervisor interrupts were enabled prior to trapping into supervisor mode. When a trap is taken into supervisor mode, SPIE is set to SIE, and SIE is set to 0. When an SRET instruction is executed, SIE is set to SPIE, then SPIE is set to 1. The UIE bit enables or disables user-mode interrupts. User-level interrupts are enabled only if UIE is set and the hart is running in user-mode. The UPIE bit indicates whether user-level interrupts were enabled prior to taking a user-level trap. When a URET instruction is executed, UIE is set to UPIE, and UPIE is set to 1. User-level interrupts are optional. If omitted, the UIE and UPIE bits are hardwired to zero.
->
-> 4.1.9 Supervisor Exception Program Counter (sepc)
->
-> When a trap is taken into S-mode, sepc is written with the virtual address of the instruction that was interrupted or that encountered the exception. Otherwise, sepc is never written by the implementation, though it may be explicitly written by software.
->
-> 4.1.10 Supervisor Cause Register (scause)
->
-> When a trap is taken into S-mode, scause is written with a code indicating the event that caused the trap. Otherwise, scause is never written by the implementation, though it may be explicitly written by software.
->
-> 4.1.11 Supervisor Trap Value (stval) Register
->
-> When a trap is taken into S-mode, stval is written with exception-specific information to assist software in handling the trap. Otherwise, stval is never written by the implementation, though it may be explicitly written by software. The hardware platform will specify which exceptions must set stval informatively and which may unconditionally set it to zero. When a hardware breakpoint is triggered, or an instruction-fetch, load, or store address-misaligned, access, or page-fault exception occurs, stval is written with the faulting virtual address. On an illegal instruction trap, stval may be written with the first XLEN or ILEN bits of the faulting instruction as described below. For other exceptions, stval is set to zero, but a future standard may redefine stval’s setting for other exceptions.
-
-#### 特权指令
-
-RISCV支持以下和中断相关的特权指令：
-
-**ecall**(environment call)，当我们在 S 态执行这条指令时，会触发一个 ecall-from-s-mode-exception，从而进入 M 模式中的中断处理流程（如设置定时器等）；当我们在 U 态执行这条指令时，会触发一个 ecall-from-u-mode-exception，从而进入 S 模式中的中断处理流程（常用来进行系统调用）。
-
-**sret**，用于 S 态中断返回到 U 态，实际作用为pc←sepc，回顾**sepc**定义，返回到通过中断进入 S 态之前的地址。
-
-**ebreak**(environment break)，执行这条指令会触发一个断点中断从而进入中断处理流程。
-
-**mret**，用于 M 态中断返回到 S 态或 U 态，实际作用为pc←mepc，回顾**sepc**定义，返回到通过中断进入 M 态之前的地址。（一般不用涉及）
+进入中断处理程序后，系统会执行一系列处理步骤，下面我们就去看看在做些什么。
 
 
 

@@ -108,18 +108,18 @@ ffffffffc0200080:	090000ef          	jal	ra,ffffffffc0200110 <cputs>
 ffffffffc0200084:	0dc000ef          	jal	ra,ffffffffc0200160 <print_kerninfo>
 
     // grade_backtrace();
-    idt_init();  // init interrupt descriptor table
+    idt_init();  // init interrupt descriptor table 第一次中断初始化
 ffffffffc0200088:	7b2000ef          	jal	ra,ffffffffc020083a <idt_init>
 
-    pmm_init();  // init physical memory management
+    pmm_init();  // init physical memory management 内存管理初始化
 ffffffffc020008c:	78a010ef          	jal	ra,ffffffffc0201816 <pmm_init>
 
-    idt_init();  // init interrupt descriptor table
+    idt_init();  // init interrupt descriptor table 第二次中断初始化
 ffffffffc0200090:	7aa000ef          	jal	ra,ffffffffc020083a <idt_init>
 
-    clock_init();   // init clock interrupt
+    clock_init();   // init clock interrupt 设置时钟中断和定时器
 ffffffffc0200094:	39a000ef          	jal	ra,ffffffffc020042e <clock_init>
-    intr_enable();  // enable irq interrupt
+    intr_enable();  // enable irq interrupt 全局启用系统中断
 ffffffffc0200098:	796000ef          	jal	ra,ffffffffc020082e <intr_enable>
 
     /* do nothing */
@@ -1233,10 +1233,10 @@ ffffffffc0200838:	8082                	ret
 ffffffffc020083a <idt_init>:
      */
 
-    extern void __alltraps(void);
+    extern void __alltraps(void); // 所有中断处理函数的入口地址
     /* Set sup0 scratch register to 0, indicating to exception vector
        that we are presently executing in the kernel */
-    write_csr(sscratch, 0);
+    write_csr(sscratch, 0); // 初始化 supervisor scratch 寄存器为 0
 ffffffffc020083a:	14005073          	csrwi	sscratch,0
     /* Set the exception vector address */
     write_csr(stvec, &__alltraps);

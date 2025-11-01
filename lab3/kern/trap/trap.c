@@ -45,28 +45,31 @@ void idt_init(void) {
      *     Notice: the argument of lidt is idt_pd. try to find it!
      */
 
-    extern void __alltraps(void);
+    extern void __alltraps(void); // 所有中断处理函数的入口地址
     /* Set sup0 scratch register to 0, indicating to exception vector
        that we are presently executing in the kernel */
-    write_csr(sscratch, 0);
+    write_csr(sscratch, 0); // 初始化 supervisor scratch 寄存器为 0
     /* Set the exception vector address */
     write_csr(stvec, &__alltraps);
 }
 
 /* trap_in_kernel - test if trap happened in kernel */
+// 检查中断/异常是否发生在内核态
 bool trap_in_kernel(struct trapframe *tf) {
     return (tf->status & SSTATUS_SPP) != 0;
 }
 
+// 打印 trapframe 信息
 void print_trapframe(struct trapframe *tf) {
     cprintf("trapframe at %p\n", tf);
     print_regs(&tf->gpr);
-    cprintf("  status   0x%08x\n", tf->status);
-    cprintf("  epc      0x%08x\n", tf->epc);
-    cprintf("  badvaddr 0x%08x\n", tf->badvaddr);
-    cprintf("  cause    0x%08x\n", tf->cause);
+    cprintf("  status   0x%08x\n", tf->status); // 打印 status 寄存器值
+    cprintf("  epc      0x%08x\n", tf->epc); // 打印 epc 寄存器值
+    cprintf("  badvaddr 0x%08x\n", tf->badvaddr); // 打印 badvaddr 寄存器值
+    cprintf("  cause    0x%08x\n", tf->cause); // 打印 cause 寄存器值
 }
 
+// 打印寄存器信息
 void print_regs(struct pushregs *gpr) {
     cprintf("  zero     0x%08x\n", gpr->zero);
     cprintf("  ra       0x%08x\n", gpr->ra);
