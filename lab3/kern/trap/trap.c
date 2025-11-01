@@ -105,6 +105,8 @@ void print_regs(struct pushregs *gpr) {
     cprintf("  t6       0x%08x\n", gpr->t6);
 }
 
+// 中断处理函数,trapframe 作为参数传递，保存的是中断/异常发生时的寄存器状态
+// trapframe在trap.h中定义
 void interrupt_handler(struct trapframe *tf) {
     intptr_t cause = (tf->cause << 1) >> 1;
     switch (cause) {
@@ -124,6 +126,7 @@ void interrupt_handler(struct trapframe *tf) {
             cprintf("User Timer interrupt\n");
             break;
         case IRQ_S_TIMER:
+            // 处理时钟中断的时候的逻辑
             // "All bits besides SSIP and USIP in the sip register are
             // read-only." -- privileged spec1.9.1, 4.1.4, p59
             // In fact, Call sbi_set_timer will clear STIP, or you can clear it
@@ -169,6 +172,7 @@ void interrupt_handler(struct trapframe *tf) {
     }
 }
 
+// 异常处理函数,trapframe 作为参数传递，保存的是异常发生时的寄存器状态
 void exception_handler(struct trapframe *tf) {
     switch (tf->cause) {
         case CAUSE_MISALIGNED_FETCH:
@@ -217,6 +221,9 @@ void exception_handler(struct trapframe *tf) {
     }
 }
 
+// 异常/中断分发函数
+// 根据 trapframe 中的 cause 字段判断是中断还是异常
+// 若 cause 为负数，则为中断，否则为异常
 static inline void trap_dispatch(struct trapframe *tf) {
     if ((intptr_t)tf->cause < 0) {
         // interrupts

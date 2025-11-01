@@ -121,7 +121,10 @@ ffffffffc0200090:	7aa000ef          	jal	ra,ffffffffc020083a <idt_init>
 ffffffffc0200094:	39a000ef          	jal	ra,ffffffffc020042e <clock_init>
     intr_enable();  // enable irq interrupt 全局启用系统中断
 ffffffffc0200098:	796000ef          	jal	ra,ffffffffc020082e <intr_enable>
-
+    //cprintf("\n--- 开始测试非法指令异常 ---\n");
+    //asm volatile (".word 0xdeadbeef");  // 这是一个非法指令
+    //cprintf("--- 非法指令异常测试完成，程序继续执行 --\n\n");
+    
     /* do nothing */
     while (1)
 ffffffffc020009c:	a001                	j	ffffffffc020009c <kern_init+0x48>
@@ -1247,10 +1250,10 @@ ffffffffc0200846:	10579073          	csrw	stvec,a5
 ffffffffc020084a:	8082                	ret
 
 ffffffffc020084c <print_regs>:
-    cprintf("  badvaddr 0x%08x\n", tf->badvaddr);
-    cprintf("  cause    0x%08x\n", tf->cause);
+    cprintf("  cause    0x%08x\n", tf->cause); // 打印 cause 寄存器值
 }
 
+// 打印寄存器信息
 void print_regs(struct pushregs *gpr) {
     cprintf("  zero     0x%08x\n", gpr->zero);
 ffffffffc020084c:	610c                	ld	a1,0(a0)
@@ -1446,36 +1449,38 @@ ffffffffc0200a2c:	eacff0ef          	jal	ra,ffffffffc02000d8 <cprintf>
     print_regs(&tf->gpr);
 ffffffffc0200a30:	8522                	mv	a0,s0
 ffffffffc0200a32:	e1bff0ef          	jal	ra,ffffffffc020084c <print_regs>
-    cprintf("  status   0x%08x\n", tf->status);
+    cprintf("  status   0x%08x\n", tf->status); // 打印 status 寄存器值
 ffffffffc0200a36:	10043583          	ld	a1,256(s0)
 ffffffffc0200a3a:	00002517          	auipc	a0,0x2
 ffffffffc0200a3e:	cb650513          	addi	a0,a0,-842 # ffffffffc02026f0 <commands+0x4f0>
 ffffffffc0200a42:	e96ff0ef          	jal	ra,ffffffffc02000d8 <cprintf>
-    cprintf("  epc      0x%08x\n", tf->epc);
+    cprintf("  epc      0x%08x\n", tf->epc); // 打印 epc 寄存器值
 ffffffffc0200a46:	10843583          	ld	a1,264(s0)
 ffffffffc0200a4a:	00002517          	auipc	a0,0x2
 ffffffffc0200a4e:	cbe50513          	addi	a0,a0,-834 # ffffffffc0202708 <commands+0x508>
 ffffffffc0200a52:	e86ff0ef          	jal	ra,ffffffffc02000d8 <cprintf>
-    cprintf("  badvaddr 0x%08x\n", tf->badvaddr);
+    cprintf("  badvaddr 0x%08x\n", tf->badvaddr); // 打印 badvaddr 寄存器值
 ffffffffc0200a56:	11043583          	ld	a1,272(s0)
 ffffffffc0200a5a:	00002517          	auipc	a0,0x2
 ffffffffc0200a5e:	cc650513          	addi	a0,a0,-826 # ffffffffc0202720 <commands+0x520>
 ffffffffc0200a62:	e76ff0ef          	jal	ra,ffffffffc02000d8 <cprintf>
-    cprintf("  cause    0x%08x\n", tf->cause);
+    cprintf("  cause    0x%08x\n", tf->cause); // 打印 cause 寄存器值
 ffffffffc0200a66:	11843583          	ld	a1,280(s0)
 }
 ffffffffc0200a6a:	6402                	ld	s0,0(sp)
 ffffffffc0200a6c:	60a2                	ld	ra,8(sp)
-    cprintf("  cause    0x%08x\n", tf->cause);
+    cprintf("  cause    0x%08x\n", tf->cause); // 打印 cause 寄存器值
 ffffffffc0200a6e:	00002517          	auipc	a0,0x2
 ffffffffc0200a72:	cca50513          	addi	a0,a0,-822 # ffffffffc0202738 <commands+0x538>
 }
 ffffffffc0200a76:	0141                	addi	sp,sp,16
-    cprintf("  cause    0x%08x\n", tf->cause);
+    cprintf("  cause    0x%08x\n", tf->cause); // 打印 cause 寄存器值
 ffffffffc0200a78:	e60ff06f          	j	ffffffffc02000d8 <cprintf>
 
 ffffffffc0200a7c <interrupt_handler>:
 
+// 中断处理函数,trapframe 作为参数传递，保存的是中断/异常发生时的寄存器状态
+// trapframe在trap.h中定义
 void interrupt_handler(struct trapframe *tf) {
     intptr_t cause = (tf->cause << 1) >> 1;
 ffffffffc0200a7c:	11853783          	ld	a5,280(a0)
@@ -1579,6 +1584,7 @@ ffffffffc0200b38:	3b00106f          	j	ffffffffc0201ee8 <sbi_shutdown>
 
 ffffffffc0200b3c <exception_handler>:
 
+// 异常处理函数,trapframe 作为参数传递，保存的是异常发生时的寄存器状态
 void exception_handler(struct trapframe *tf) {
     switch (tf->cause) {
 ffffffffc0200b3c:	11853783          	ld	a5,280(a0)
@@ -1658,6 +1664,9 @@ ffffffffc0200bc2:	8082                	ret
 
 ffffffffc0200bc4 <trap>:
 
+// 异常/中断分发函数
+// 根据 trapframe 中的 cause 字段判断是中断还是异常
+// 若 cause 为负数，则为中断，否则为异常
 static inline void trap_dispatch(struct trapframe *tf) {
     if ((intptr_t)tf->cause < 0) {
 ffffffffc0200bc4:	11853783          	ld	a5,280(a0)

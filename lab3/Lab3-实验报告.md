@@ -191,7 +191,7 @@ if (ticks % TICK_NUM == 0) {
 
 ### 扩展练习Challenge3：完善异常中断
 
-我还实现了对非法指令异常和断点异常的处理：
+实现了对非法指令异常和断点异常的处理：
 
 1. 对于非法指令异常：
    - 输出异常类型"Exception type: Illegal instruction"
@@ -216,6 +216,12 @@ case CAUSE_BREAKPOINT:
     tf->epc += 4; // 假设每条指令占4字节
     break;
 ```
+
+> [!note]
+>
+> 
+
+
 
 ## 实验运行结果
 

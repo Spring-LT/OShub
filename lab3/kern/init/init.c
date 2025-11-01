@@ -35,6 +35,17 @@ int kern_init(void) {
     clock_init();   // init clock interrupt 设置时钟中断和定时器
     intr_enable();  // enable irq interrupt 全局启用系统中断
 
+    /* 触发异常进行测试 - 可以注释掉以禁用异常测试 */
+    // 触发断点异常 (ebreak指令)
+    //cprintf("\n--- 开始测试断点异常 ---\n");
+    //asm volatile ("ebreak");
+    //cprintf("--- 断点异常测试完成，程序继续执行 --\n\n");
+    
+    // 触发非法指令异常 (使用一个RISC-V不支持的指令)
+    //cprintf("\n--- 开始测试非法指令异常 ---\n");
+    //asm volatile (".word 0xdeadbeef");  // 这是一个非法指令
+    //cprintf("--- 非法指令异常测试完成，程序继续执行 --\n\n");
+    
     /* do nothing */
     while (1)
         ;
