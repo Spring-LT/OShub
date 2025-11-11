@@ -6,10 +6,8 @@ if [ "x$1" = "x-v" ]; then
     out=/dev/stdout
     err=/dev/stderr
 else
-    # out=/dev/null
-    # err=/dev/null
-    out=/dev/stdout
-    err=/dev/stderr
+    out=/dev/null
+    err=/dev/null
 fi
 
 ## make & makeopts
@@ -25,9 +23,7 @@ make_print() {
     echo `$make $makeopts print-$1`
 }
 
-echo ">>>>>>>>>> here_make>>>>>>>>>>>"
 echo `$make`
-echo ">>>>>>>>>> here_make>>>>>>>>>>>"
 
 ## command tools
 awk='awk'
@@ -128,7 +124,6 @@ fail() {
 }
 
 run_qemu() {
-    echo "try to run qemu"
     # Run qemu with serial output redirected to $qemu_out. If $brkfun is non-empty,
     # wait until $brkfun is reached or $timeout expires, then kill QEMU
     qemuextra=
@@ -142,12 +137,10 @@ run_qemu() {
 
     t0=$(get_time)
     (
-        
         ulimit -t $timeout
         exec $qemu -nographic $qemuopts -serial file:$qemu_out -monitor null -no-reboot $qemuextra
     ) > $out 2> $err &
     pid=$!
-    echo "qemu pid=$pid"
 
     # wait for QEMU to start
     sleep 1
@@ -174,7 +167,6 @@ run_qemu() {
 }
 
 build_run() {
-    echo "here_build_run"
     # usage: build_run <tag> <args>
     show_build_tag "$1"
     shift
@@ -324,56 +316,27 @@ osimg=$(make_print ucoreimg)
 swapimg=$(make_print swapimg)
 
 ## set default qemu-options
-# qemuopts="-hda $osimg"
 qemuopts="-machine virt -nographic -bios default -device loader,file=bin/ucore.img,addr=0x80200000"
+
 ## set break-function, default is readline
 brkfun=readline
 
+run_qemu
+
 ## check now!!
 
-# quick_run 'Check PMM'
+# quick_run 'Check VMM'
 
-# pts=20
-# quick_check 'check pmm'                                         \
-#     'memory management: default_pmm_manager'                     \
-#     'check_alloc_page() succeeded!'                             \
-#     'check_pgdir() succeeded!'                                  \
-#     'check_boot_pgdir() succeeded!'
 
-# pts=20
-# quick_check 'check page table'                                  \
-#     'PDE(0e0) c0000000-f8000000 38000000 urw'                   \
-#     '  |-- PTE(38000) c0000000-f8000000 38000000 -rw'           \
-#     'PDE(001) fac00000-fb000000 00400000 -rw'                   \
-#     '  |-- PTE(000e0) faf00000-fafe0000 000e0000 urw'           \
-#     '  |-- PTE(00001) fafeb000-fafec000 00001000 -rw'
+pts=15
+quick_check 'check alloc proc'                                  \
+    'alloc_proc() correct!'
 
-# pts=10
-# quick_check 'check ticks'                                       \
-#     '++ setup timer interrupts'                                 \
-#     '100 ticks'                                                 \
-#     'End of Test.'
-
-echo "<<<<<<<<<<<<<<< here_run_qemu <<<<<<<<<<<<<<<<<<"
-run_qemu
-echo "<<<<<<<<<<<<<<< here_run_check <<<<<<<<<<<<<<<<<<"
-
-pts=5
-quick_check 'check physical_memory_map_information'                                         \
-    'memory management: best_fit_pmm_manager'                     \
-    '  memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].'                                  \
-
-pts=20
-quick_check 'check_best_fit'                                       \
-    'check_alloc_page() succeeded!'                                  \
-    'satp virtual address: 0xffffffffc0205000'                       \
-    'satp physical address: 0x0000000080205000'                      \
-
-pts=5
-quick_check 'check ticks'                                       \
-    '++ setup timer interrupts'                                 \
-    '100 ticks'                                                 \
+pts=15
+quick_check 'check initproc'                                    \
+    'this initproc, pid = 1, name = "init"'                     \
+    'To U: "Hello world!!".'                                    \
+    'To U: "en.., Bye, Bye. :)"'
 
 ## print final-score
 show_final
-
