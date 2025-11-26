@@ -422,14 +422,41 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
              * (3) memory copy from src_kvaddr to dst_kvaddr, size is PGSIZE
              * (4) build the map of phy addr of  nage with the linear addr start
              */
-            // (1) 获取源页面的内核虚拟地址
-            void *src_kvaddr = page2kva(page);
-            // (2) 获取目标页面的内核虚拟地址
-            void *dst_kvaddr = page2kva(npage);
-            // (3) 将源页面内容复制到目标页面
-            memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
-            // (4) 建立目标页面物理地址与线性地址start的映射关系
-            ret = page_insert(to, npage, start, perm);
+            
+            /* LAB5 CHALLENGE: COW (Copy on Write) 实现
+             * 如果share参数为true，则使用COW机制：
+             * - 父子进程共享同一物理页面
+             * - 将页面设置为只读并标记COW
+             * - 当任一进程写入时触发page fault进行实际复制
+             */
+            if (share) {
+                // COW模式：共享页面，设置只读+COW标志
+                // 释放刚分配的页面（不需要了）
+                free_page(npage);
+                
+                // 如果原页面可写，则设置为只读并标记COW
+                uint32_t cow_perm = perm;
+                if (perm & PTE_W) {
+                    cow_perm = (perm & ~PTE_W) | PTE_COW;
+                    // 更新父进程的PTE为只读+COW
+                    *ptep = pte_create(page2ppn(page), cow_perm);
+                    tlb_invalidate(from, start);
+                }
+                
+                // 子进程共享同一页面
+                page_ref_inc(page);
+                ret = page_insert(to, page, start, cow_perm);
+            } else {
+                // 普通模式：直接复制页面内容
+                // (1) 获取源页面的内核虚拟地址
+                void *src_kvaddr = page2kva(page);
+                // (2) 获取目标页面的内核虚拟地址
+                void *dst_kvaddr = page2kva(npage);
+                // (3) 将源页面内容复制到目标页面
+                memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+                // (4) 建立目标页面物理地址与线性地址start的映射关系
+                ret = page_insert(to, npage, start, perm);
+            }
 
             assert(ret == 0);
         }
@@ -677,5 +704,74 @@ static int get_pgtable_items(size_t left, size_t right, size_t start,
         }
         return perm;
     }
+    return 0;
+}
+
+/* LAB5 CHALLENGE: COW (Copy on Write) page fault 处理函数
+ * 当进程尝试写入一个COW页面时，触发page fault，调用此函数进行处理
+ * 
+ * 参数:
+ *   mm   - 当前进程的内存管理结构
+ *   addr - 触发page fault的虚拟地址
+ * 
+ * 返回值:
+ *   0    - 成功处理COW fault
+ *   -1   - 不是COW页面或处理失败
+ */
+int do_cow_fault(struct mm_struct *mm, uintptr_t addr)
+{
+    if (mm == NULL) {
+        return -1;
+    }
+    
+    // 获取页表项
+    pte_t *ptep = get_pte(mm->pgdir, addr, 0);
+    if (ptep == NULL || !(*ptep & PTE_V)) {
+        return -1;  // 页面不存在
+    }
+    
+    // 检查是否是COW页面
+    if (!(*ptep & PTE_COW)) {
+        return -1;  // 不是COW页面
+    }
+    
+    // 获取原页面
+    struct Page *old_page = pte2page(*ptep);
+    
+    // 获取原始权限（恢复写权限，去除COW标志）
+    uint32_t perm = (*ptep & (PTE_USER | PTE_R | PTE_X)) | PTE_W;
+    perm &= ~PTE_COW;
+    
+    // 如果只有一个引用，直接修改权限即可（无需复制）
+    if (page_ref(old_page) == 1) {
+        // 直接更新页表项，恢复写权限
+        *ptep = pte_create(page2ppn(old_page), perm);
+        tlb_invalidate(mm->pgdir, addr);
+        return 0;
+    }
+    
+    // 分配新页面
+    struct Page *new_page = alloc_page();
+    if (new_page == NULL) {
+        return -E_NO_MEM;
+    }
+    
+    // 复制页面内容
+    void *src_kvaddr = page2kva(old_page);
+    void *dst_kvaddr = page2kva(new_page);
+    memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+    
+    // 减少原页面的引用计数
+    page_ref_dec(old_page);
+    
+    // 建立新页面的映射（带写权限）
+    int ret = page_insert(mm->pgdir, new_page, ROUNDDOWN(addr, PGSIZE), perm);
+    if (ret != 0) {
+        // 失败时恢复
+        page_ref_inc(old_page);
+        free_page(new_page);
+        return ret;
+    }
+    
     return 0;
 }

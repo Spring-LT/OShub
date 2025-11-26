@@ -562,3 +562,378 @@ Total Score: 130/130
 2. **信号机制**：异步事件通知
 3. **线程**：轻量级进程，共享地址空间
 4. **进程优先级调度**：实验中使用简单的轮转调度
+
+---
+
+## 扩展练习 Challenge
+
+### Challenge 1: 实现 Copy on Write (COW) 机制
+
+#### 1.1 COW机制概述
+
+Copy on Write (COW) 是一种延迟复制优化技术。当父进程fork子进程时，不立即复制内存页面，而是让父子进程共享同一物理页面，并将页面标记为只读。当任一进程尝试写入共享页面时，触发页面错误（page fault），此时才真正复制页面，使得两个进程都有各自的内存页面。
+
+#### 1.2 实现源码
+
+##### 1.2.1 COW标志位定义 (kern/mm/mmu.h)
+
+```c
+// COW (Copy on Write) 标志位，使用软件保留位
+#define PTE_COW  0x100 // Copy on Write flag (使用PTE_SOFT的低位)
+```
+
+##### 1.2.2 修改copy_range函数 (kern/mm/pmm.c)
+
+```c
+if (share) {
+    // COW模式：共享页面，设置只读+COW标志
+    // 释放刚分配的页面（不需要了）
+    free_page(npage);
+    
+    // 如果原页面可写，则设置为只读并标记COW
+    uint32_t cow_perm = perm;
+    if (perm & PTE_W) {
+        cow_perm = (perm & ~PTE_W) | PTE_COW;
+        // 更新父进程的PTE为只读+COW
+        *ptep = pte_create(page2ppn(page), cow_perm);
+        tlb_invalidate(from, start);
+    }
+    
+    // 子进程共享同一页面
+    page_ref_inc(page);
+    ret = page_insert(to, page, start, cow_perm);
+} else {
+    // 普通模式：直接复制页面内容
+    void *src_kvaddr = page2kva(page);
+    void *dst_kvaddr = page2kva(npage);
+    memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+    ret = page_insert(to, npage, start, perm);
+}
+```
+
+##### 1.2.3 COW Page Fault处理函数 (kern/mm/pmm.c)
+
+```c
+int do_cow_fault(struct mm_struct *mm, uintptr_t addr)
+{
+    if (mm == NULL) {
+        return -1;
+    }
+    
+    // 获取页表项
+    pte_t *ptep = get_pte(mm->pgdir, addr, 0);
+    if (ptep == NULL || !(*ptep & PTE_V)) {
+        return -1;  // 页面不存在
+    }
+    
+    // 检查是否是COW页面
+    if (!(*ptep & PTE_COW)) {
+        return -1;  // 不是COW页面
+    }
+    
+    // 获取原页面
+    struct Page *old_page = pte2page(*ptep);
+    
+    // 获取原始权限（恢复写权限，去除COW标志）
+    uint32_t perm = (*ptep & (PTE_USER | PTE_R | PTE_X)) | PTE_W;
+    perm &= ~PTE_COW;
+    
+    // 如果只有一个引用，直接修改权限即可（无需复制）
+    if (page_ref(old_page) == 1) {
+        *ptep = pte_create(page2ppn(old_page), perm);
+        tlb_invalidate(mm->pgdir, addr);
+        return 0;
+    }
+    
+    // 分配新页面
+    struct Page *new_page = alloc_page();
+    if (new_page == NULL) {
+        return -E_NO_MEM;
+    }
+    
+    // 复制页面内容
+    void *src_kvaddr = page2kva(old_page);
+    void *dst_kvaddr = page2kva(new_page);
+    memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+    
+    // 减少原页面的引用计数
+    page_ref_dec(old_page);
+    
+    // 建立新页面的映射（带写权限）
+    int ret = page_insert(mm->pgdir, new_page, ROUNDDOWN(addr, PGSIZE), perm);
+    if (ret != 0) {
+        page_ref_inc(old_page);
+        free_page(new_page);
+        return ret;
+    }
+    
+    return 0;
+}
+```
+
+##### 1.2.4 修改Store Page Fault处理 (kern/trap/trap.c)
+
+```c
+case CAUSE_STORE_PAGE_FAULT:
+    // Store page fault - 可能是COW触发的
+    if (current != NULL && current->mm != NULL) {
+        // 尝试处理COW fault
+        if (do_cow_fault(current->mm, tf->tval) == 0) {
+            // COW处理成功，继续执行
+            break;
+        }
+    }
+    cprintf("Store/AMO page fault at 0x%08x\n", tf->tval);
+    if ((tf->status & SSTATUS_SPP) == 0) {
+        do_exit(-E_KILLED);
+    }
+    break;
+```
+
+#### 1.3 测试用例 (user/cowtest.c)
+
+```c
+/*
+ * COW (Copy on Write) 测试程序
+ */
+#include <ulib.h>
+#include <stdio.h>
+
+int global_var = 100;
+
+int main(void) {
+    cprintf("COW Test Program\n");
+    
+    int stack_var = 200;
+    
+    cprintf("Before fork:\n");
+    cprintf("  global_var = %d, stack_var = %d\n", global_var, stack_var);
+    
+    int pid = fork();
+    
+    if (pid == 0) {
+        // 子进程修改变量 - 触发COW
+        global_var = 999;
+        stack_var = 888;
+        cprintf("[Child] After write: global_var = %d, stack_var = %d\n", 
+                global_var, stack_var);
+        exit(0);
+    } else {
+        wait();
+        cprintf("[Parent] global_var = %d (should be 100)\n", global_var);
+        cprintf("[Parent] stack_var = %d (should be 200)\n", stack_var);
+        
+        if (global_var == 100 && stack_var == 200) {
+            cprintf("COW test PASSED!\n");
+        } else {
+            cprintf("COW test FAILED!\n");
+        }
+    }
+    return 0;
+}
+```
+
+#### 1.4 COW状态转换图（有限状态自动机）
+
+```
+                              fork()
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                                                                 │
+    │  ┌─────────────┐                      ┌─────────────────────┐   │
+    │  │   Private   │                      │  Shared (COW)       │   │
+    │  │   RW Page   │ ──────────────────>  │  RO + COW Flag      │   │
+    │  │  (ref = 1)  │     fork时设置       │  (ref = 2)          │   │
+    │  └─────────────┘     只读+COW         └─────────────────────┘   │
+    │                                                │                │
+    │                                                │                │
+    │                                    写入触发     │                │
+    │                                   page fault   │                │
+    │                                                ▼                │
+    │                              ┌─────────────────────────────────┐│
+    │                              │      do_cow_fault()             ││
+    │                              │                                 ││
+    │                              │  检查 ref_count:                ││
+    │                              │                                 ││
+    │                              │  ref > 1:        ref == 1:      ││
+    │                              │  复制页面        直接修改权限    ││
+    │                              └─────────────────────────────────┘│
+    │                                       │              │          │
+    │                                       │              │          │
+    │                                       ▼              ▼          │
+    │                              ┌─────────────┐  ┌─────────────┐   │
+    │                              │  Private    │  │  Private    │   │
+    │                              │  RW Page    │  │  RW Page    │   │
+    │                              │  (ref = 1)  │  │  (ref = 1)  │   │
+    │                              │  (新页面)   │  │  (原页面)   │   │
+    │                              └─────────────┘  └─────────────┘   │
+    │                                                                 │
+    └─────────────────────────────────────────────────────────────────┘
+
+状态说明：
+┌────────────────────┬────────────────────────────────────────────────┐
+│       状态         │                    描述                        │
+├────────────────────┼────────────────────────────────────────────────┤
+│ Private RW Page    │ 私有可写页面，只有一个进程使用                  │
+│ Shared RO + COW    │ 共享只读页面，带COW标志，多个进程共享           │
+│ Page Fault Handler │ 写入COW页面时触发的处理程序                     │
+└────────────────────┴────────────────────────────────────────────────┘
+
+转换事件：
+┌────────────────────┬────────────────────────────────────────────────┐
+│       事件         │                    动作                        │
+├────────────────────┼────────────────────────────────────────────────┤
+│ fork()             │ 设置页面为只读+COW，增加引用计数                │
+│ 写入 (ref > 1)     │ 分配新页面，复制内容，减少原页面引用            │
+│ 写入 (ref == 1)    │ 直接修改PTE权限，无需复制                       │
+└────────────────────┴────────────────────────────────────────────────┘
+```
+
+#### 1.5 Dirty COW漏洞分析
+
+Dirty COW (CVE-2016-5195) 是Linux内核中的一个竞态条件漏洞，存在于COW机制的实现中。
+
+##### 漏洞原理
+
+在Linux内核的COW实现中，当处理写时复制时存在竞态条件：
+
+1. 进程A尝试写入一个COW页面
+2. 内核开始处理page fault，准备复制页面
+3. 在复制完成之前，另一个线程（进程A的另一个线程）可能修改页表
+4. 由于竞态条件，写入可能直接发生在原始的只读页面上
+
+##### 在ucore中的模拟
+
+在ucore的简化实现中，由于是单核单线程调度，不存在真正的并发竞态条件。但我们可以分析潜在的问题：
+
+```c
+// 潜在的竞态条件位置
+int do_cow_fault(struct mm_struct *mm, uintptr_t addr)
+{
+    // 1. 获取页表项
+    pte_t *ptep = get_pte(mm->pgdir, addr, 0);
+    
+    // 【竞态窗口】如果此时另一个线程修改了ptep...
+    
+    // 2. 检查COW标志
+    if (!(*ptep & PTE_COW)) {
+        return -1;
+    }
+    
+    // 【竞态窗口】如果此时页面被其他线程释放...
+    
+    // 3. 获取原页面并复制
+    struct Page *old_page = pte2page(*ptep);
+    // ...
+}
+```
+
+##### 解决方案
+
+1. **加锁保护**：在整个COW处理过程中持有mm_lock
+2. **原子操作**：使用原子操作更新页表项
+3. **双重检查**：在关键操作前后检查页表状态
+
+```c
+// 改进的COW处理（带锁保护）
+int do_cow_fault_safe(struct mm_struct *mm, uintptr_t addr)
+{
+    lock_mm(mm);  // 获取锁
+    
+    pte_t *ptep = get_pte(mm->pgdir, addr, 0);
+    if (ptep == NULL || !(*ptep & PTE_V) || !(*ptep & PTE_COW)) {
+        unlock_mm(mm);
+        return -1;
+    }
+    
+    // ... COW处理逻辑 ...
+    
+    unlock_mm(mm);  // 释放锁
+    return 0;
+}
+```
+
+### Challenge 2: 用户程序加载时机分析
+
+#### 2.1 ucore中用户程序的加载时机
+
+在ucore中，用户程序是在**编译时**被预先加载到内核镜像中的，而不是在运行时从文件系统加载。
+
+##### 加载过程分析
+
+1. **编译阶段**：
+   - 用户程序（如hello.c）被编译成ELF格式的可执行文件
+   - 链接器将用户程序作为二进制数据嵌入到内核镜像中
+
+2. **Makefile中的处理**：
+```makefile
+$(kernel): $(KOBJS) $(USER_BINS)
+    $(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS) \
+        --format=binary $(USER_BINS) --format=default
+```
+   - `--format=binary`：将用户程序作为原始二进制数据链接
+   - 用户程序被嵌入到内核的数据段中
+
+3. **运行时加载**：
+   - `kernel_execve`函数通过符号名找到嵌入的用户程序
+   - `load_icode`函数解析ELF格式，建立用户地址空间
+
+```c
+// kern/process/proc.c
+static int
+user_main(void *arg)
+{
+    KERNEL_EXECVE(hello);  // 执行嵌入的hello程序
+}
+
+#define KERNEL_EXECVE(x) ({                                     \
+    extern unsigned char _binary_obj___user_##x##_out_start[],  \
+        _binary_obj___user_##x##_out_size[];                    \
+    kernel_execve(#x, _binary_obj___user_##x##_out_start,       \
+                  (size_t)(_binary_obj___user_##x##_out_size)); \
+})
+```
+
+#### 2.2 与常用操作系统的区别
+
+| 特性 | ucore | Linux/Windows |
+|------|-------|---------------|
+| **加载时机** | 编译时嵌入内核 | 运行时从文件系统加载 |
+| **存储位置** | 内核镜像中 | 磁盘文件系统 |
+| **加载方式** | 直接内存访问 | 通过文件系统和页面调度 |
+| **灵活性** | 固定，需重新编译 | 动态，可随时添加程序 |
+| **内存占用** | 所有程序常驻内存 | 按需加载 |
+
+#### 2.3 原因分析
+
+ucore采用这种方式的原因：
+
+1. **简化实现**：
+   - 不需要实现完整的文件系统
+   - 不需要实现磁盘驱动和文件读取
+   - 减少了系统复杂度
+
+2. **教学目的**：
+   - 专注于进程管理和内存管理的核心概念
+   - 避免文件系统带来的额外复杂性
+   - 便于学生理解ELF加载和进程创建过程
+
+3. **嵌入式系统特点**：
+   - 类似于嵌入式系统中的做法
+   - 适合资源受限的环境
+   - 启动速度快
+
+4. **实验环境限制**：
+   - QEMU模拟器环境
+   - 没有真实的磁盘设备
+   - 简化了实验配置
+
+#### 2.4 改进方向
+
+如果要实现类似真实操作系统的加载方式，需要：
+
+1. 实现文件系统（如Simple File System）
+2. 实现磁盘驱动
+3. 实现`exec`系统调用从文件加载程序
+4. 实现按需分页（demand paging）
+
+这些内容在后续的Lab（如Lab8文件系统）中会涉及。

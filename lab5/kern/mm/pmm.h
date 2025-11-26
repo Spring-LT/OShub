@@ -7,6 +7,9 @@
 #include <atomic.h>
 #include <assert.h>
 
+// 前向声明
+struct mm_struct;
+
 // pmm_manager is a physical memory management class. A special pmm manager - XXX_pmm_manager
 // only needs to implement the methods in pmm_manager class, then XXX_pmm_manager can be used
 // by ucore to manage the total physical memory space.
@@ -48,6 +51,9 @@ struct Page *pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm);
 void unmap_range(pde_t *pgdir, uintptr_t start, uintptr_t end);
 void exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end);
 int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end, bool share);
+
+// COW (Copy on Write) 相关函数
+int do_cow_fault(struct mm_struct *mm, uintptr_t addr);
 
 void print_pgdir(void);
 
