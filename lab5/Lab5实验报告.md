@@ -673,6 +673,8 @@ int do_cow_fault(struct mm_struct *mm, uintptr_t addr)
 
 ##### 1.2.4 修改Store Page Fault处理 (kern/trap/trap.c)
 
+当启用COW时，需要在Store page fault处理中调用`do_cow_fault`：
+
 ```c
 case CAUSE_STORE_PAGE_FAULT:
     // Store page fault - 可能是COW触发的
@@ -689,6 +691,21 @@ case CAUSE_STORE_PAGE_FAULT:
     }
     break;
 ```
+
+##### 1.2.5 启用COW机制 (kern/mm/vmm.c)
+
+要启用COW，需要修改`dup_mmap`函数中的`share`参数：
+
+```c
+// 在 dup_mmap 函数中
+bool share = 1;  // 改为1启用COW（原为0）
+if (copy_range(to->pgdir, from->pgdir, vma->vm_start, vma->vm_end, share) != 0)
+{
+    return -E_NO_MEM;
+}
+```
+
+**注意**：当前实现中`share`默认为0，COW机制的代码已准备就绪但未启用。这是为了保持与原有测试的兼容性。如需启用COW，将`share`改为1并取消注释trap.c中的COW处理代码即可。
 
 #### 1.3 测试用例 (user/cowtest.c)
 

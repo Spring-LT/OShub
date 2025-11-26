@@ -31,7 +31,7 @@ DTB init completed
 
 Special kernel symbols:
   entry  0xc020004a (virtual)
-  etext  0xc0205978 (virtual)
+  etext  0xc02057aa (virtual)
   edata  0xc02b15a0 (virtual)
   end    0xc02b5a44 (virtual)
 Kernel executable memory footprint: 727KB
@@ -52,7 +52,7 @@ Breakpoint
 Making sure bss works right...
 Yes, good.  Now doing a wild write off the end...
 testbss may pass.
-Store/AMO page fault at 0x00c02000
+Store/AMO page fault
 all user-mode processes have quit.
 init check memory pass.
 kernel panic at kern/process/proc.c:541:

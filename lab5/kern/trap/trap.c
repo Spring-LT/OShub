@@ -227,15 +227,7 @@ void exception_handler(struct trapframe *tf)
         }
         break;
     case CAUSE_STORE_PAGE_FAULT:
-        // Store page fault - 可能是COW触发的
-        if (current != NULL && current->mm != NULL) {
-            // 尝试处理COW fault
-            if (do_cow_fault(current->mm, tf->tval) == 0) {
-                // COW处理成功，继续执行
-                break;
-            }
-        }
-        cprintf("Store/AMO page fault at 0x%08x\n", tf->tval);
+        cprintf("Store/AMO page fault\n");
         if ((tf->status & SSTATUS_SPP) == 0) {
             do_exit(-E_KILLED);
         }
