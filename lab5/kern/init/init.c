@@ -30,13 +30,13 @@ int kern_init(void)
 
     // grade_backtrace();
 
-    pmm_init(); // init physical memory management 物理内存管理
+    pmm_init(); // init physical memory management
 
-    pic_init(); // init interrupt controller 中断控制器 + 中断描述符
+    pic_init(); // init interrupt controller
     idt_init(); // init interrupt descriptor table
 
-    vmm_init();  // init virtual memory management 虚拟内存管理，建立内核页表，完成静态映射
-    proc_init(); // init process table 初始化进程管理，跳转到lab4/kern/process/proc.c，422行
+    vmm_init();  // init virtual memory management
+    proc_init(); // init process table
 
     clock_init();  // init clock interrupt
     intr_enable(); // enable irq interrupt
