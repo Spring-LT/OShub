@@ -15,6 +15,7 @@
 #include <sched.h>
 #include <sync.h>
 #include <sbi.h>
+#include <proc.h>
 
 #define TICK_NUM 100
 
@@ -127,6 +128,14 @@ void interrupt_handler(struct trapframe *tf)
          *(3)当计数器加到100的时候，我们会输出一个`100ticks`表示我们触发了100次时钟中断，同时打印次数（num）加一
          * (4)判断打印次数，当打印次数为10时，调用<sbi.h>中的关机函数关机
          */
+        clock_set_next_event();
+        ticks++;
+        if (ticks % TICK_NUM == 0) {
+            print_ticks();
+        }
+        if (current != NULL) {
+            current->need_resched = 1;
+        }
         break;
     case IRQ_H_TIMER:
         cprintf("Hypervisor software interrupt\n");
@@ -205,12 +214,22 @@ void exception_handler(struct trapframe *tf)
         break;
     case CAUSE_FETCH_PAGE_FAULT:
         cprintf("Instruction page fault\n");
+        if ((tf->status & SSTATUS_SPP) == 0) {
+            // 用户态发生page fault，终止进程
+            do_exit(-E_KILLED);
+        }
         break;
     case CAUSE_LOAD_PAGE_FAULT:
         cprintf("Load page fault\n");
+        if ((tf->status & SSTATUS_SPP) == 0) {
+            do_exit(-E_KILLED);
+        }
         break;
     case CAUSE_STORE_PAGE_FAULT:
         cprintf("Store/AMO page fault\n");
+        if ((tf->status & SSTATUS_SPP) == 0) {
+            do_exit(-E_KILLED);
+        }
         break;
     default:
         print_trapframe(tf);
