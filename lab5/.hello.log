@@ -54,6 +54,6 @@ I am process 2.
 hello pass.
 all user-mode processes have quit.
 init check memory pass.
-kernel panic at kern/process/proc.c:541:
+kernel panic at kern/process/proc.c:515:
     initproc exit.
 

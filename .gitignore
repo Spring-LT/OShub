@@ -24,3 +24,7 @@ obj/
 # 辅助说明文件
 lab3/中断处理流程详解.md
 lab4/代码注释索引.md
+
+lab5/*.*log
+lab5/*.*out
+lab5/*.*bin

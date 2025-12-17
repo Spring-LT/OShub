@@ -16,8 +16,9 @@ syscall(int64_t num, ...) {
     }
     va_end(ap);
 
+    // 将syscall编号放进a0，参数放进a1-a5，执行ecall，返回值从a0取出
     asm volatile (
-        "ld a0, %1\n"
+        "ld a0, %1\n" 
         "ld a1, %2\n"
         "ld a2, %3\n"
         "ld a3, %4\n"
@@ -35,7 +36,7 @@ int
 sys_exit(int64_t error_code) {
     return syscall(SYS_exit, error_code);
 }
-
+// 直接拿当前的tf，并进行调用 sys_fork ->do_fork
 int
 sys_fork(void) {
     return syscall(SYS_fork);

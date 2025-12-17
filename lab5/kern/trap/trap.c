@@ -161,6 +161,9 @@ void interrupt_handler(struct trapframe *tf)
         break;
     }
 }
+// 该函数在lab5/kern/trap/trapentry.S中150行左右实现，用于在execve后将trapframe拷贝到新栈并sret返回用户态
+// 参数tf是当前的trapframe，kstacktop是新进程的内核栈顶地址
+// 用于在execve后调整trapframe位置并返回用户态
 void kernel_execve_ret(struct trapframe *tf, uintptr_t kstacktop);
 void exception_handler(struct trapframe *tf)
 {
@@ -180,9 +183,9 @@ void exception_handler(struct trapframe *tf)
         cprintf("Breakpoint\n");
         if (tf->gpr.a7 == 10)
         {
-            tf->epc += 4;
-            syscall();
-            kernel_execve_ret(tf, current->kstack + KSTACKSIZE);
+            tf->epc += 4; // sepc 指向的是“触发异常的那条指令地址”（ebreak 的地址）。如果不加 4，等会 sret 回去还会再执行一次 ebreak → 无限陷入异常
+            syscall(); // 先进行syscall
+            kernel_execve_ret(tf, current->kstack + KSTACKSIZE); // 进行kernel_execve_ret()：把 trapframe 搬到新内核栈位置，准备“返回用户态”
         }
         break;
     case CAUSE_MISALIGNED_LOAD:
@@ -268,11 +271,11 @@ void trap(struct trapframe *tf)
     else
     {
         struct trapframe *otf = current->tf;
-        current->tf = tf;
+        current->tf = tf; //临时把当前进程的 tf 指向这次 trap 保存的 trapframe
 
         bool in_kernel = trap_in_kernel(tf);
 
-        trap_dispatch(tf);
+        trap_dispatch(tf); // exception_handler(tf)（因为 breakpoint 是 exception，不是 interrupt）
 
         current->tf = otf;
         if (!in_kernel)

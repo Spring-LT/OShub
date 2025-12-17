@@ -25,7 +25,7 @@ sys_wait(uint64_t arg[]) {
     int *store = (int *)arg[1];
     return do_wait(pid, store);
 }
-
+// syscall() → syscalls[SYS_exec] → sys_exec() → do_execve() → load_icode()
 static int
 sys_exec(uint64_t arg[]) {
     const char *name = (const char *)arg[0];
@@ -78,6 +78,7 @@ static int (*syscalls[])(uint64_t arg[]) = {
 
 #define NUM_SYSCALLS        ((sizeof(syscalls)) / (sizeof(syscalls[0])))
 
+// 因为 SAVE_ALL 已经把当时寄存器 a0~a7 保存到了 tf->gpr.a0...a7。
 void
 syscall(void) {
     struct trapframe *tf = current->tf;
@@ -90,7 +91,7 @@ syscall(void) {
             arg[2] = tf->gpr.a3;
             arg[3] = tf->gpr.a4;
             arg[4] = tf->gpr.a5;
-            tf->gpr.a0 = syscalls[num](arg);
+            tf->gpr.a0 = syscalls[num](arg);// 返回值塞入 a0
             return ;
         }
     }

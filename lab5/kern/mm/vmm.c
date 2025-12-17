@@ -202,6 +202,7 @@ out:
     return ret;
 }
 
+// 对每个vma都会调用 copy_range
 int dup_mmap(struct mm_struct *to, struct mm_struct *from)
 {
     assert(to != NULL && from != NULL);
@@ -349,6 +350,7 @@ check_vma_struct(void)
 
     cprintf("check_vma_struct() succeeded!\n");
 }
+// 在内核访问用户指针前，先验证这段用户虚拟地址是否在 VMA 范围内且权限匹配，防止漏洞与错误。
 bool user_mem_check(struct mm_struct *mm, uintptr_t addr, size_t len, bool write)
 {
     if (mm != NULL)

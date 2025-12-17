@@ -9,10 +9,14 @@
     # If coming from userspace, preserve the user stack pointer and load
     # the kernel stack pointer. If we came from the kernel, sscratch
     # will contain 0, and we should continue on the current stack.
+    # 1. 处理用户栈/内核栈切换
+    # 如果 trap 来自 U-mode：sscratch 里通常放的是“内核栈顶指针”，交换后 sp 会变成内核栈
+    # 如果 trap 来自 S-mode：sscratch 里是 0，交换后 sp=0，于是走 _restore_kernel_sp 用 sscratch 恢复（用于区分来源）
     csrrw sp, sscratch, sp
     bnez sp, _save_context
 
 _restore_kernel_sp:
+    # 从 sscratch 恢复内核栈指针
     csrr sp, sscratch
 _save_context:
     addi sp, sp, -36 * REGBYTES
@@ -69,9 +73,11 @@ _save_context:
     LOCAL _save_kernel_sp
     LOCAL _restore_context
 
+    # 从栈中加载 sstatus 和 sepc
     LOAD s1, 32*REGBYTES(sp)
     LOAD s2, 33*REGBYTES(sp)
 
+    # 检查是否来自内核态（SSTATUS_SPP 位）
     andi s0, s1, SSTATUS_SPP
     bnez s0, _restore_context
 
@@ -129,12 +135,16 @@ __alltraps:
     .globl __trapret
 __trapret:
     RESTORE_ALL
-    # return from supervisor call
+    # 1. 恢复寄存器状态
+    # 2. 通过 sret 返回到之前的状态（用户态或内核态）
+    # return from supervisor call 这里最后依赖于在tf中设置的epc返回到哪条指令，status:返回到U还是S
+    # 特权级切到 U-mode：sret 指令会根据 tf->status 的 SSTATUS_SPP 位决定返回到 U-mode 还是 S-mode
+    # lab5/kern/trap/trap.c 中的 exception_handler 会调用 kernel_execve_ret，它会修改栈帧位置后 sret 回去
     sret
  
     .globl forkrets
 forkrets:
-    # set stack to this new process's trapframe
+    # set stack to this new process's trapframe, 这里是子进程从forkret返回后执行的入口
     move sp, a0
     j __trapret
 

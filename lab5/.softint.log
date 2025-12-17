@@ -51,6 +51,6 @@ kernel_execve: pid = 2, name = "softint".
 Breakpoint
 all user-mode processes have quit.
 init check memory pass.
-kernel panic at kern/process/proc.c:541:
+kernel panic at kern/process/proc.c:515:
     initproc exit.
 

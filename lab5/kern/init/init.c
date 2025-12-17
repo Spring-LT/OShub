@@ -30,16 +30,16 @@ int kern_init(void)
 
     // grade_backtrace();
 
-    pmm_init(); // init physical memory management
+    pmm_init(); // init physical memory management 物理内存管理
 
-    pic_init(); // init interrupt controller
-    idt_init(); // init interrupt descriptor table
+    pic_init(); // init interrupt controller 中断控制器初始化
+    idt_init(); // init interrupt descriptor table 设置trap入口
 
-    vmm_init();  // init virtual memory management
-    proc_init(); // init process table
+    vmm_init();  // init virtual memory management 虚拟内存管理初始化
+    proc_init(); // init process table 进程系统初始化
 
-    clock_init();  // init clock interrupt
-    intr_enable(); // enable irq interrupt
+    clock_init();  // init clock interrupt 时钟中断
+    intr_enable(); // enable irq interrupt 开中断
 
     cpu_idle(); // run idle process
 }

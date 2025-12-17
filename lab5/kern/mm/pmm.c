@@ -382,6 +382,7 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
     do
     {
         // call get_pte to find process A's pte according to the addr start
+        // 找到父进程 PTE，分配新页
         pte_t *ptep = get_pte(from, start, 0), *nptep;
         if (ptep == NULL)
         {
